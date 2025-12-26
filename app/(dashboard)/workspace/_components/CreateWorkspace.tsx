@@ -27,10 +27,14 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { workspaceSchema } from "@/app/schemas/workspace";
+import { workspaceSchema, WorkspaceSchemaType } from "@/app/schemas/workspace";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { orpc } from "@/lib/orpc";
+import { toast } from "sonner";
 
 export default function CreateWorkspace() {
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const form = useForm({
     resolver: zodResolver(workspaceSchema),
@@ -38,22 +42,27 @@ export default function CreateWorkspace() {
       name: "",
     },
   });
-  function onSubmit() {
-    /*  toast("You submitted the following values:", {
-      description: (
-        <pre className="bg-code text-code-foreground mt-2 w-[320px] overflow-x-auto rounded-md p-4">
-          <code>{JSON.stringify(data, null, 2)}</code>
-        </pre>
-      ),
-      position: "bottom-right",
-      classNames: {
-        content: "flex flex-col gap-2",
+
+  const createWorkspaceMutation = useMutation(
+    orpc.workspace.create.mutationOptions({
+      onSuccess: (newWorkspace) => {
+        toast.success(
+          `Workspace ${newWorkspace.workspaceName} created successfully!`
+        );
+        queryClient.invalidateQueries({
+          queryKey: orpc.workspace.list.queryKey(),
+        });
+        form.reset();
+        setOpen(false);
       },
-      style: {
-        "--border-radius": "calc(var(--radius)  + 4px)",
-      } as React.CSSProperties,
-    }); */
-    console.log("data");
+      onError: (error) => {
+        toast.error(`Failed to create workspace: ${error.message}`);
+      },
+    })
+  );
+  function onSubmit(values: WorkspaceSchemaType) {
+    createWorkspaceMutation.mutate(values);
+    console.log(values);
   }
 
   return (
@@ -86,7 +95,7 @@ export default function CreateWorkspace() {
             <FormField
               control={form.control}
               name="name"
-              render={(field) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Workspace Name</FormLabel>
                   <FormControl>
@@ -96,7 +105,14 @@ export default function CreateWorkspace() {
                 </FormItem>
               )}
             />
-            <Button type="submit">Create Workspace</Button>
+            <Button
+              type="submit"
+              disabled={createWorkspaceMutation.isPending} // Disable while loading
+            >
+              {createWorkspaceMutation.isPending
+                ? "Creating..."
+                : "Create Workspace"}
+            </Button>
           </form>
         </Form>
       </DialogContent>
